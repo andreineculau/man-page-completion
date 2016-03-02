@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+# based on http://blog.dblevins.com/2010/03/man-page-based-bash-completion.html
+
+function _man_match_tokens() {
+    grep "^\\\\f[PIBR]" | sed s/^[^\\\\]*\\\\f.// | sed s/\\\\fR.*// | sed s/\\\ .*// | sed s/\\\\//g
+}
+
+function _man_match_section() {
+    pcregrep -Mi "(?s)\\.SH \\\"[A-Za-z0-9 ]*(NCS|OPTIONS|COMMANDS)[A-Za-z0-9 ]*\\\".*?(?=\\.SH)"
+}
+
+function _man_match() {
+    CMD=$(basename "$1")
+    CMDS=(
+        ${CMD}
+        ${CMD//\-/\_}
+        ${CMD//\_/\-}
+    )
+
+    OPTS=""
+
+    for MANDIR in $(echo "${MANPATH}" | tr ':' '\n'); do
+        MANPAGES=$( for CMD in "${CMDS[@]}"; do echo "${MANDIR}/man1/${CMD}.1"; done | tr '\n' ' ' )
+	    MANPAGES=( $( echo "${MANPAGES[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' ' ) )
+        for MANPAGE in "${MANPAGES[@]}"; do
+            OPTS_ADD=$(
+                [ -f "${MANPAGE}" ] && cat "${MANPAGE}" | _man_match_section | _man_match_tokens; \
+	            [ -f "${MANPAGE}".gz ] && gunzip -c "${MANPAGE}".gz | _man_match_section | _man_match_tokens
+            )
+            OPTS="${OPTS}\n${OPTS_ADD[@]}"
+        done
+    done
+
+    echo -e "${OPTS[@]}" | sort -u
+}
+
+function _man_generic() {
+    # local IFS=$'\t\n' cmd cur opts
+
+    CUR="${COMP_WORDS[COMP_CWORD]}"
+    OPTS=$(_man_match "$1")
+
+    COMPREPLY=($(compgen -W "${OPTS}" -- "${CUR}"))
+}
